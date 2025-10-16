@@ -1,41 +1,60 @@
+// pages/api/rewrite.js
 export default async function handler(req, res) {
-  const { text } = req.body;
-
-  if (!process.env.OPENAI_API_KEY) {
-    return res.status(500).json({ error: "Missing OpenAI API key" });
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const { text } = req.body || {};
+    if (!text || !text.trim()) {
+      return res.status(400).json({ error: "Missing text in request body" });
+    }
+
+    const OPENAI_KEY = process.env.OPENAI_API_KEY;
+    if (!OPENAI_KEY) {
+      return res.status(500).json({ error: "Missing OPENAI_API_KEY in environment" });
+    }
+
+    // 构建请求给 OpenAI
+    const payload = {
+      model: "gpt-4o-mini", // 或 "gpt-3.5-turbo"，如报 model 不存在请改为 gpt-3.5-turbo
+      messages: [
+        {
+          role: "system",
+          content:
+            "你是一个温柔治愈的沟通顾问。将下列用户原文改写为温柔、体贴且保留原意的表达，句子简短清晰，适合直接发送给对方。仅返回最终文本内容。",
+        },
+        { role: "user", content: text },
+      ],
+      temperature: 0.7,
+      max_tokens: 400,
+    };
+
+    const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        Authorization: `Bearer ${OPENAI_KEY}`,
       },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content:
-              "你是一位温柔治愈的情绪翻译助手，请将用户输入的内容改写为温柔且体贴的语气。",
-          },
-          {
-            role: "user",
-            content: text,
-          },
-        ],
-      }),
+      body: JSON.stringify(payload),
     });
 
-    const data = await response.json();
+    const openaiData = await openaiRes.json();
 
-    if (!response.ok) {
-      return res.status(500).json({ error: data.error });
+    if (!openaiRes.ok) {
+      // 将 openai 返回的错误一并返回以便调试
+      return res.status(500).json({ error: "OpenAI API error", details: openaiData });
     }
 
-    res.status(200).json({ result: data.choices[0].message.content });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    const reply = openaiData.choices?.[0]?.message?.content;
+    if (!reply) {
+      return res.status(500).json({ error: "No response from model", raw: openaiData });
+    }
+
+    // 返回给前端的结构
+    return res.status(200).json({ result: reply });
+  } catch (err) {
+    console.error("rewrite error:", err);
+    return res.status(500).json({ error: "Server error", details: String(err) });
   }
 }
