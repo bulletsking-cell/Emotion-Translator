@@ -1,4 +1,5 @@
 // pages/api/rewrite.js
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -11,13 +12,14 @@ export default async function handler(req, res) {
     }
 
     const OPENAI_KEY = process.env.OPENAI_API_KEY;
+    const MODEL = process.env.OPENAI_MODEL || "gpt-3.5-turbo";
+
     if (!OPENAI_KEY) {
       return res.status(500).json({ error: "Missing OPENAI_API_KEY in environment" });
     }
 
-    // 构建请求给 OpenAI
     const payload = {
-      model: "gpt-4o-mini", // 或 "gpt-3.5-turbo"，如报 model 不存在请改为 gpt-3.5-turbo
+      model: MODEL,
       messages: [
         {
           role: "system",
@@ -40,21 +42,29 @@ export default async function handler(req, res) {
     });
 
     const openaiData = await openaiRes.json();
+    console.log("OpenAI response:", openaiData); // ✅ 调试日志
 
     if (!openaiRes.ok) {
-      // 将 openai 返回的错误一并返回以便调试
-      return res.status(500).json({ error: "OpenAI API error", details: openaiData });
+      return res.status(500).json({
+        error: "OpenAI API error",
+        details: openaiData,
+      });
     }
 
     const reply = openaiData.choices?.[0]?.message?.content;
     if (!reply) {
-      return res.status(500).json({ error: "No response from model", raw: openaiData });
+      return res.status(500).json({
+        error: "No response from model",
+        raw: openaiData,
+      });
     }
 
-    // 返回给前端的结构
     return res.status(200).json({ result: reply });
   } catch (err) {
     console.error("rewrite error:", err);
-    return res.status(500).json({ error: "Server error", details: String(err) });
+    return res.status(500).json({
+      error: "Server error",
+      details: String(err),
+    });
   }
 }
